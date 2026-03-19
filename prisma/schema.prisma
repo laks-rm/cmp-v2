@@ -1,0 +1,510 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================
+// ENUMS
+// ===================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CMP_MANAGER
+  DEPT_MANAGER
+  REVIEWER
+  PIC
+  READ_ONLY
+  AI_ACTION_USER
+  AI_READ_ONLY
+}
+
+enum SourceType {
+  REGULATION
+  INTERNAL_AUDIT
+  EXTERNAL_AUDIT
+  POLICY
+  SOP
+  OTHER
+}
+
+enum SourceCategory {
+  AML
+  SANCTIONS
+  REGULATORY_REPORTING
+  LICENSE
+  DATA_PROTECTION
+  CONSUMER_PROTECTION
+  IT_SECURITY
+  GOVERNANCE
+  OTHER
+}
+
+enum SourceStatus {
+  DRAFT
+  ACTIVE
+  PENDING_ASSIGNMENT
+  INACTIVE
+  ARCHIVED
+}
+
+enum TaskFrequency {
+  DAILY
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUALLY
+  ANNUALLY
+  ONE_TIME
+  AD_HOC
+}
+
+enum ReviewerLogic {
+  FIXED_USER
+  SOURCE_REVIEWER
+  DEPT_MANAGER
+  ROUND_ROBIN
+}
+
+enum AssignmentLogic {
+  FIXED_PIC
+  DEPARTMENT_QUEUE
+  ROUND_ROBIN
+  MANUAL
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_REVIEW
+  RETURNED
+  APPROVED
+  OVERDUE
+  CLOSED
+}
+
+enum AssignmentStatus {
+  UNASSIGNED
+  ASSIGNED
+  REASSIGNED
+  ESCALATED
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RiskLevel {
+  HIGH
+  MEDIUM
+  LOW
+  NOT_ASSESSED
+}
+
+enum EvidenceStatus {
+  NOT_REQUIRED
+  MISSING
+  PARTIAL
+  COMPLETE
+}
+
+enum ReviewDecision {
+  APPROVED
+  RETURNED
+  REJECTED
+}
+
+enum AuditChannel {
+  WEB
+  AI
+  SLACK
+  SYSTEM
+  API
+  CRON
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_OVERDUE
+  REVIEW_NEEDED
+  ESCALATION
+  SOURCE_CREATED
+  VERSION_ACTIVATED
+  AI_SUGGESTION
+  REMINDER
+}
+
+// ===================================
+// MODELS
+// ===================================
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  entities Entity[]
+
+  @@map("groups")
+}
+
+model Entity {
+  id                 String   @id @default(uuid())
+  name               String
+  code               String   @unique
+  country_code       String
+  country_flag_emoji String
+  group_id           String
+  is_active          Boolean  @default(true)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  group Group @relation(fields: [group_id], references: [id])
+
+  user_access    UserEntityAccess[]
+  sources        SourceEntity[]
+  task_instances TaskInstance[]
+  audit_logs     AuditLog[]
+
+  @@index([group_id])
+  @@map("entities")
+}
+
+model Department {
+  id         String   @id @default(uuid())
+  name       String
+  code       String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users          User[]
+  sources        Source[]
+  task_instances TaskInstance[]
+  audit_logs     AuditLog[]
+
+  @@map("departments")
+}
+
+model User {
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  password_hash        String
+  name                 String
+  department_id        String?
+  team                 String?
+  role                 UserRole
+  is_active            Boolean  @default(true)
+  ai_permission_level  String?
+  manager_id           String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  department Department? @relation(fields: [department_id], references: [id])
+  manager    User?       @relation("UserManager", fields: [manager_id], references: [id])
+
+  entity_access            UserEntityAccess[]
+  managed_users            User[]                    @relation("UserManager")
+  sources_created          Source[]                  @relation("SourceCreator")
+  sources_as_pic           Source[]                  @relation("SourcePIC")
+  sources_as_reviewer      Source[]                  @relation("SourceReviewer")
+  task_instances_as_pic    TaskInstance[]            @relation("TaskInstancePIC")
+  task_instances_as_reviewer TaskInstance[]          @relation("TaskInstanceReviewer")
+  tasks_reviewed           TaskInstance[]            @relation("TaskInstanceReviewedBy")
+  evidence_files           EvidenceFile[]
+  comments                 Comment[]
+  audit_logs               AuditLog[]                @relation("AuditLogUser")
+  audit_logs_as_affected   AuditLog[]                @relation("AuditLogAffectedUser")
+  notifications            Notification[]
+
+  @@index([department_id])
+  @@index([manager_id])
+  @@index([email])
+  @@map("users")
+}
+
+model UserEntityAccess {
+  id        String @id @default(uuid())
+  user_id   String
+  entity_id String
+
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, entity_id])
+  @@index([user_id])
+  @@index([entity_id])
+  @@map("user_entity_access")
+}
+
+model Source {
+  id                     String         @id @default(uuid())
+  code                   String         @unique
+  title                  String
+  source_type            SourceType
+  category               SourceCategory
+  description            String?        @db.Text
+  department_id          String
+  effective_from         DateTime       @db.Date
+  effective_to           DateTime?      @db.Date
+  pic_user_id            String?
+  reviewer_user_id       String?
+  risk_level             RiskLevel      @default(NOT_ASSESSED)
+  tags                   String[]
+  reference_document_url String?
+  status                 SourceStatus   @default(DRAFT)
+  version_number         Int            @default(1)
+  created_by             String
+  archived               Boolean        @default(false)
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @updatedAt
+
+  department       Department     @relation(fields: [department_id], references: [id])
+  creator          User           @relation("SourceCreator", fields: [created_by], references: [id])
+  pic_user         User?          @relation("SourcePIC", fields: [pic_user_id], references: [id])
+  reviewer_user    User?          @relation("SourceReviewer", fields: [reviewer_user_id], references: [id])
+
+  entities_in_scope SourceEntity[]
+  clauses           Clause[]
+  task_templates    TaskTemplate[]
+  task_instances    TaskInstance[]
+  audit_logs        AuditLog[]
+
+  @@index([status])
+  @@index([department_id])
+  @@index([code])
+  @@index([created_by])
+  @@map("sources")
+}
+
+model SourceEntity {
+  id        String @id @default(uuid())
+  source_id String
+  entity_id String
+
+  source Source @relation(fields: [source_id], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  @@unique([source_id, entity_id])
+  @@index([source_id])
+  @@index([entity_id])
+  @@map("source_entities")
+}
+
+model Clause {
+  id             String   @id @default(uuid())
+  source_id      String
+  source_version Int
+  clause_number  String
+  title          String
+  description    String?  @db.Text
+  sequence_order Int
+  is_active      Boolean  @default(true)
+  ai_generated   Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  source Source @relation(fields: [source_id], references: [id], onDelete: Cascade)
+
+  task_templates TaskTemplate[]
+  task_instances TaskInstance[]
+  audit_logs     AuditLog[]
+
+  @@unique([source_id, source_version, clause_number])
+  @@index([source_id, source_version])
+  @@map("clauses")
+}
+
+model TaskTemplate {
+  id                      String          @id @default(uuid())
+  clause_id               String
+  source_id               String
+  title                   String
+  description             String?         @db.Text
+  frequency               TaskFrequency
+  frequency_config        Json?
+  due_date_offset_days    Int
+  review_required         Boolean
+  reviewer_logic          ReviewerLogic?
+  evidence_required       Boolean
+  evidence_description    String?         @db.Text
+  expected_outcome        String?         @db.Text
+  priority                Priority        @default(MEDIUM)
+  assignment_logic        AssignmentLogic @default(DEPARTMENT_QUEUE)
+  reminder_days_before    Int[]
+  escalation_days_after   Int?
+  escalation_to           String?
+  is_active               Boolean         @default(true)
+  ai_generated            Boolean         @default(false)
+  sequence_order          Int
+  created_at              DateTime        @default(now())
+  updated_at              DateTime        @updatedAt
+
+  clause Clause @relation(fields: [clause_id], references: [id], onDelete: Cascade)
+  source Source @relation(fields: [source_id], references: [id], onDelete: Cascade)
+
+  task_instances TaskInstance[]
+
+  @@index([clause_id])
+  @@index([source_id])
+  @@map("task_templates")
+}
+
+model TaskInstance {
+  id                    String           @id @default(uuid())
+  task_code             String           @unique
+  task_template_id      String
+  clause_id             String
+  source_id             String
+  title                 String
+  description           String?          @db.Text
+  entity_id             String
+  department_id         String
+  pic_user_id           String?
+  reviewer_user_id      String?
+  status                TaskStatus       @default(NOT_STARTED)
+  assignment_status     AssignmentStatus @default(UNASSIGNED)
+  period_start          DateTime         @db.Date
+  period_end            DateTime         @db.Date
+  due_date              DateTime         @db.Date
+  priority              Priority
+  review_required       Boolean
+  evidence_required     Boolean
+  evidence_status       EvidenceStatus   @default(NOT_REQUIRED)
+  expected_outcome      String?          @db.Text
+  actual_outcome        String?          @db.Text
+  submitted_at          DateTime?
+  reviewed_at           DateTime?
+  reviewed_by           String?
+  review_decision       ReviewDecision?
+  review_comments       String?          @db.Text
+  closed_at             DateTime?
+  overdue_flagged_at    DateTime?
+  reminder_sent_dates   DateTime[]
+  escalation_sent_at    DateTime?
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @updatedAt
+
+  task_template    TaskTemplate   @relation(fields: [task_template_id], references: [id])
+  clause           Clause         @relation(fields: [clause_id], references: [id])
+  source           Source         @relation(fields: [source_id], references: [id])
+  entity           Entity         @relation(fields: [entity_id], references: [id])
+  department       Department     @relation(fields: [department_id], references: [id])
+  pic_user         User?          @relation("TaskInstancePIC", fields: [pic_user_id], references: [id])
+  reviewer_user    User?          @relation("TaskInstanceReviewer", fields: [reviewer_user_id], references: [id])
+  reviewed_by_user User?          @relation("TaskInstanceReviewedBy", fields: [reviewed_by], references: [id])
+
+  evidence_files EvidenceFile[]
+  comments       Comment[]
+  audit_logs     AuditLog[]
+
+  @@unique([task_template_id, period_start, entity_id])
+  @@index([status])
+  @@index([due_date])
+  @@index([source_id])
+  @@index([entity_id])
+  @@index([pic_user_id])
+  @@index([task_code])
+  @@map("task_instances")
+}
+
+model EvidenceFile {
+  id               String   @id @default(uuid())
+  task_instance_id String
+  filename         String
+  file_url         String
+  file_size        Int
+  mime_type        String
+  uploaded_by      String
+  created_at       DateTime @default(now())
+
+  task_instance TaskInstance @relation(fields: [task_instance_id], references: [id], onDelete: Cascade)
+  uploader      User         @relation(fields: [uploaded_by], references: [id])
+
+  @@index([task_instance_id])
+  @@map("evidence_files")
+}
+
+model Comment {
+  id               String   @id @default(uuid())
+  task_instance_id String
+  user_id          String
+  text             String   @db.Text
+  created_at       DateTime @default(now())
+
+  task_instance TaskInstance @relation(fields: [task_instance_id], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [user_id], references: [id])
+
+  @@index([task_instance_id])
+  @@map("comments")
+}
+
+model AuditLog {
+  id               String        @id @default(uuid())
+  timestamp        DateTime      @default(now())
+  user_id          String?
+  user_role        String?
+  action_type      String
+  module           String
+  source_id        String?
+  clause_id        String?
+  task_instance_id String?
+  entity_id        String?
+  department_id    String?
+  affected_user_id String?
+  old_value        Json?
+  new_value        Json?
+  changed_field    String?
+  channel          AuditChannel  @default(WEB)
+  success          Boolean       @default(true)
+  error_message    String?       @db.Text
+  ip_address       String?
+  user_agent       String?
+  metadata         Json?
+
+  user           User?         @relation("AuditLogUser", fields: [user_id], references: [id])
+  source         Source?       @relation(fields: [source_id], references: [id])
+  clause         Clause?       @relation(fields: [clause_id], references: [id])
+  task_instance  TaskInstance? @relation(fields: [task_instance_id], references: [id])
+  entity         Entity?       @relation(fields: [entity_id], references: [id])
+  department     Department?   @relation(fields: [department_id], references: [id])
+  affected_user  User?         @relation("AuditLogAffectedUser", fields: [affected_user_id], references: [id])
+
+  @@index([timestamp])
+  @@index([action_type])
+  @@index([module])
+  @@index([user_id])
+  @@index([source_id])
+  @@index([task_instance_id])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id                String           @id @default(uuid())
+  user_id           String
+  type              NotificationType
+  title             String
+  message           String           @db.Text
+  link_url          String?
+  is_read           Boolean          @default(false)
+  related_source_id String?
+  related_task_id   String?
+  created_at        DateTime         @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read])
+  @@map("notifications")
+}
