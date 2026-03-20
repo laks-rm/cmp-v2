@@ -161,16 +161,19 @@ export async function PUT(
     // If status changed to ACTIVE, trigger task generation
     if (newStatus === 'ACTIVE' && oldStatus !== 'ACTIVE') {
       console.log(`🚀 Source status changed to ACTIVE, triggering task generation for ${params.id}`)
-      try {
-        const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
-        const taskGenResult = await generateTasksForSource(params.id)
-        console.log(
-          `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
-        )
-      } catch (error) {
-        console.error('Task generation error (non-blocking):', error)
-        // Don't fail the update if task generation fails
-      }
+      
+      // Run task generation in the background without blocking the response
+      setImmediate(async () => {
+        try {
+          const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
+          const taskGenResult = await generateTasksForSource(params.id)
+          console.log(
+            `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
+          )
+        } catch (error) {
+          console.error('Task generation error (non-blocking):', error)
+        }
+      })
     }
 
     return NextResponse.json(
