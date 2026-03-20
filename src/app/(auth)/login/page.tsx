@@ -12,13 +12,13 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({})
   const [isLoading, setIsLoading] = useState(false)
 
-  // Test users for easy login
+  // Test users for easy login (matching actual seed data)
   const testUsers = [
-    { role: 'Super Admin', email: 'admin@deriv.com', password: 'password123', color: 'var(--accent-red)' },
-    { role: 'CMP Manager', email: 'cmp.manager@deriv.com', password: 'password123', color: 'var(--accent-purple)' },
-    { role: 'Dept Manager', email: 'dept.manager@deriv.com', password: 'password123', color: 'var(--accent-amber)' },
-    { role: 'Reviewer', email: 'reviewer@deriv.com', password: 'password123', color: 'var(--accent-blue)' },
-    { role: 'PIC', email: 'pic@deriv.com', password: 'password123', color: 'var(--accent-green)' },
+    { role: 'Super Admin', email: 'laks.r@deriv.com', password: 'password123', color: 'var(--accent-red)' },
+    { role: 'CMP Manager', email: 'sarah.m@deriv.com', password: 'password123', color: 'var(--accent-purple)' },
+    { role: 'Reviewer', email: 'john.d@deriv.com', password: 'password123', color: 'var(--accent-blue)' },
+    { role: 'Reviewer 2', email: 'maria.t@deriv.com', password: 'password123', color: 'var(--accent-amber)' },
+    { role: 'PIC', email: 'ali.k@deriv.com', password: 'password123', color: 'var(--accent-green)' },
   ]
 
   const quickLogin = (user: typeof testUsers[0]) => {
