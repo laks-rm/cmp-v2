@@ -103,15 +103,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initAuth = async () => {
       setIsLoading(true)
 
-      // Try to refresh token
-      const refreshed = await tryRefresh()
-
-      if (!refreshed) {
-        // No valid session, redirect to login if not already there
-        const currentPath = window.location.pathname
-        if (!currentPath.startsWith('/login')) {
-          router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
+      // Check localStorage for existing session (temporary for Okta migration)
+      if (typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('cmp_user')
+        const storedToken = localStorage.getItem('cmp_token')
+        
+        if (storedUser && storedToken) {
+          try {
+            setUser(JSON.parse(storedUser))
+            setAccessToken(storedToken)
+            setIsLoading(false)
+            return
+          } catch (error) {
+            // Invalid stored data, clear it
+            localStorage.removeItem('cmp_user')
+            localStorage.removeItem('cmp_token')
+          }
         }
+      }
+
+      // No valid session, redirect to login if not already there
+      const currentPath = window.location.pathname
+      if (!currentPath.startsWith('/login')) {
+        router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
       }
 
       setIsLoading(false)
@@ -155,6 +169,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
+      // Clear localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cmp_user')
+        localStorage.removeItem('cmp_token')
+      }
       setUser(null)
       setAccessToken(null)
       router.push('/login')

@@ -190,7 +190,7 @@ export async function POST(
       await tx.taskInstance.update({
         where: { id: params.id },
         data: {
-          evidence_status: evidenceCount > 0 && task.evidence_required ? 'COMPLETE' : task.evidence_status,
+          evidence_status: evidenceCount > 0 && task.evidence_required ? 'PARTIAL' : task.evidence_status,
         },
       })
 

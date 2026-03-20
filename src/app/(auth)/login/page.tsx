@@ -88,10 +88,15 @@ export default function LoginPage() {
         throw new Error(data.error?.message || 'Login failed')
       }
 
+      // Store user data in localStorage temporarily (for Okta migration)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cmp_user', JSON.stringify(data.data.user))
+        localStorage.setItem('cmp_token', data.data.access_token)
+      }
+
       // On success, redirect to intended page or dashboard
       const redirect = searchParams.get('redirect') || '/'
-      router.push(redirect)
-      router.refresh() // Refresh to trigger auth state update
+      window.location.href = redirect // Force full page reload to clear auth context
     } catch (error) {
       setErrors({
         general: error instanceof Error ? error.message : 'Login failed. Please try again.',

@@ -382,13 +382,13 @@ export async function PATCH(
 
     switch (action) {
       case 'start':
-        if (task.status !== 'NOT_STARTED') {
+        if (!['NOT_STARTED', 'OVERDUE'].includes(task.status)) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'INVALID_TRANSITION',
-                message: 'Task can only be started from NOT_STARTED status',
+                message: 'Task can only be started from NOT_STARTED or OVERDUE status',
               },
             },
             { status: 400 }
@@ -410,13 +410,13 @@ export async function PATCH(
         break
 
       case 'submit':
-        if (!['IN_PROGRESS', 'RETURNED'].includes(task.status)) {
+        if (!['IN_PROGRESS', 'RETURNED', 'OVERDUE'].includes(task.status)) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'INVALID_TRANSITION',
-                message: 'Task can only be submitted from IN_PROGRESS or RETURNED status',
+                message: 'Task can only be submitted from IN_PROGRESS, RETURNED, or OVERDUE status',
               },
             },
             { status: 400 }
@@ -463,13 +463,35 @@ export async function PATCH(
             { status: 400 }
           )
         }
-        if (task.reviewer_user_id !== decoded.userId) {
+        
+        // Get user role
+        const userForApprove = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+        })
+        const canApprove = userForApprove && (
+          task.reviewer_user_id === decoded.userId ||
+          ['SUPER_ADMIN', 'ADMIN', 'CMP_MANAGER'].includes(userForApprove.role)
+        )
+        
+        if (!canApprove) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'FORBIDDEN',
-                message: 'Only the assigned reviewer can approve this task',
+                message: 'Only the assigned reviewer or managers can approve this task',
+              },
+            },
+            { status: 403 }
+          )
+        }
+        if (task.pic_user_id === decoded.userId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: 'FORBIDDEN',
+                message: 'You cannot review a task you submitted',
               },
             },
             { status: 403 }
@@ -491,13 +513,35 @@ export async function PATCH(
             { status: 400 }
           )
         }
-        if (task.reviewer_user_id !== decoded.userId) {
+        
+        // Get user role
+        const userForReturn = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+        })
+        const canReturn = userForReturn && (
+          task.reviewer_user_id === decoded.userId ||
+          ['SUPER_ADMIN', 'ADMIN', 'CMP_MANAGER'].includes(userForReturn.role)
+        )
+        
+        if (!canReturn) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'FORBIDDEN',
-                message: 'Only the assigned reviewer can return this task',
+                message: 'Only the assigned reviewer or managers can return this task',
+              },
+            },
+            { status: 403 }
+          )
+        }
+        if (task.pic_user_id === decoded.userId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: 'FORBIDDEN',
+                message: 'You cannot review a task you submitted',
               },
             },
             { status: 403 }
@@ -532,13 +576,35 @@ export async function PATCH(
             { status: 400 }
           )
         }
-        if (task.reviewer_user_id !== decoded.userId) {
+        
+        // Get user role
+        const userForReject = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+        })
+        const canReject = userForReject && (
+          task.reviewer_user_id === decoded.userId ||
+          ['SUPER_ADMIN', 'ADMIN', 'CMP_MANAGER'].includes(userForReject.role)
+        )
+        
+        if (!canReject) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'FORBIDDEN',
-                message: 'Only the assigned reviewer can reject this task',
+                message: 'Only the assigned reviewer or managers can reject this task',
+              },
+            },
+            { status: 403 }
+          )
+        }
+        if (task.pic_user_id === decoded.userId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: 'FORBIDDEN',
+                message: 'You cannot review a task you submitted',
               },
             },
             { status: 403 }
@@ -556,18 +622,18 @@ export async function PATCH(
             { status: 400 }
           )
         }
-        newStatus = 'REJECTED'
+        newStatus = 'CLOSED'
         requiresComment = true
         break
 
       case 'close':
-        if (!['APPROVED', 'REJECTED'].includes(task.status)) {
+        if (!['APPROVED', 'CLOSED'].includes(task.status)) {
           return NextResponse.json(
             {
               success: false,
               error: {
                 code: 'INVALID_TRANSITION',
-                message: 'Task can only be closed from APPROVED or REJECTED status',
+                message: 'Task can only be closed from APPROVED status',
               },
             },
             { status: 400 }
@@ -608,7 +674,7 @@ export async function PATCH(
         }
       }
 
-      if (action === 'close') {
+      if (action === 'close' || action === 'reject') {
         updates.closed_at = new Date()
       }
 
@@ -659,10 +725,15 @@ export async function PATCH(
       }
 
       if (['return', 'reject', 'approve'].includes(action) && task.pic_user_id) {
+        let notificationType: 'REVIEW_NEEDED' | 'TASK_ASSIGNED' = 'TASK_ASSIGNED'
+        if (action === 'return') {
+          notificationType = 'REVIEW_NEEDED'
+        }
+        
         await tx.notification.create({
           data: {
             user_id: task.pic_user_id,
-            type: 'TASK_OVERDUE',
+            type: notificationType,
             title: `Task ${action === 'approve' ? 'Approved' : action === 'return' ? 'Returned' : 'Rejected'}`,
             message: `Task "${task.title}" has been ${action}ed`,
             link_url: `/tasks/${task.id}`,

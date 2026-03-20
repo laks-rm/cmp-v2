@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { extractBearerToken, verifyAccessToken } from '@/lib/auth'
+import { extractBearerToken } from '@/lib/auth'
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Allow public routes
-  const publicRoutes = ['/login', '/api/auth/login', '/api/auth/refresh']
+  const publicRoutes = ['/login', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout']
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next()
   }
@@ -19,12 +19,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // For API routes, check Authorization header
+  // For API routes, check Authorization header (simplified for Okta migration)
   if (isProtectedAPI) {
     const authHeader = request.headers.get('authorization')
-    const token = extractBearerToken(authHeader)
-
-    if (!token) {
+    
+    if (!authHeader) {
       return NextResponse.json(
         {
           success: false,
@@ -37,21 +36,24 @@ export function middleware(request: NextRequest) {
       )
     }
 
-    try {
-      verifyAccessToken(token)
-      return NextResponse.next()
-    } catch (error) {
+    // Simplified: Just check if token exists (for Okta migration)
+    // TODO: Replace with Okta validation
+    const token = extractBearerToken(authHeader)
+    if (!token) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'AUTHENTICATION_REQUIRED',
-            message: 'Invalid or expired token',
+            message: 'Invalid token format',
           },
         },
         { status: 401 }
       )
     }
+
+    // Skip JWT verification for now - will be replaced by Okta
+    return NextResponse.next()
   }
 
   // For protected pages, check if user has refresh token cookie

@@ -299,61 +299,80 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
             ? determineReviewer(template.reviewer_logic, source.reviewer_user_id, null)
             : null
 
-          // Create task in transaction
-          await prisma.$transaction(async (tx) => {
-            const task_code = await generateTaskCode(tx)
+          // Create task in transaction with retry logic for race conditions
+          let retries = 0
+          const maxRetries = 3
+          let taskCreated = false
 
-            const task = await tx.taskInstance.create({
-              data: {
-                task_code,
-                task_template_id: template.id,
-                clause_id: template.clause_id,
-                source_id: source.id,
-                title: template.title,
-                description: template.description,
-                entity_id: entity.id,
-                department_id: source.department_id,
-                pic_user_id,
-                reviewer_user_id,
-                status: 'NOT_STARTED',
-                assignment_status: pic_user_id ? 'ASSIGNED' : 'UNASSIGNED',
-                period_start,
-                period_end,
-                due_date,
-                priority: template.priority,
-                review_required: template.review_required,
-                evidence_required: template.evidence_required,
-                evidence_status: template.evidence_required ? 'MISSING' : 'NOT_REQUIRED',
-                expected_outcome: template.expected_outcome,
-                reminder_sent_dates: [],
-              },
-            })
+          while (!taskCreated && retries < maxRetries) {
+            try {
+              await prisma.$transaction(async (tx) => {
+                const task_code = await generateTaskCode(tx)
 
-            // Write audit log
-            await tx.auditLog.create({
-              data: {
-                action_type: 'task_created',
-                module: 'TaskInstance',
-                task_instance_id: task.id,
-                source_id: source.id,
-                entity_id: entity.id,
-                department_id: source.department_id,
-                channel: 'SYSTEM',
-                success: true,
-                new_value: {
-                  task_code: task.task_code,
-                  title: task.title,
-                  entity: entity.code,
-                  due_date: format(due_date, 'yyyy-MM-dd'),
-                },
-              },
-            })
+                const task = await tx.taskInstance.create({
+                  data: {
+                    task_code,
+                    task_template_id: template.id,
+                    clause_id: template.clause_id,
+                    source_id: source.id,
+                    title: template.title,
+                    description: template.description,
+                    entity_id: entity.id,
+                    department_id: source.department_id,
+                    pic_user_id,
+                    reviewer_user_id,
+                    status: 'NOT_STARTED',
+                    assignment_status: pic_user_id ? 'ASSIGNED' : 'UNASSIGNED',
+                    period_start,
+                    period_end,
+                    due_date,
+                    priority: template.priority,
+                    review_required: template.review_required,
+                    evidence_required: template.evidence_required,
+                    evidence_status: template.evidence_required ? 'MISSING' : 'NOT_REQUIRED',
+                    expected_outcome: template.expected_outcome,
+                    reminder_sent_dates: [],
+                  },
+                })
 
-            console.log(
-              `✨ Created task ${task.task_code} for entity ${entity.code} (due: ${format(due_date, 'yyyy-MM-dd')})`
-            )
-            result.tasks_created++
-          })
+                // Write audit log
+                await tx.auditLog.create({
+                  data: {
+                    action_type: 'task_created',
+                    module: 'TaskInstance',
+                    task_instance_id: task.id,
+                    source_id: source.id,
+                    entity_id: entity.id,
+                    department_id: source.department_id,
+                    channel: 'SYSTEM',
+                    success: true,
+                    new_value: {
+                      task_code: task.task_code,
+                      title: task.title,
+                      entity: entity.code,
+                      due_date: format(due_date, 'yyyy-MM-dd'),
+                    },
+                  },
+                })
+
+                console.log(
+                  `✨ Created task ${task.task_code} for entity ${entity.code} (due: ${format(due_date, 'yyyy-MM-dd')})`
+                )
+                result.tasks_created++
+                taskCreated = true
+              })
+            } catch (error: any) {
+              if (error.code === 'P2002' && retries < maxRetries - 1) {
+                console.log(
+                  `⚠️  Task code collision detected, retrying (attempt ${retries + 1}/${maxRetries})...`
+                )
+                retries++
+                await new Promise((resolve) => setTimeout(resolve, 100))
+              } else {
+                throw error
+              }
+            }
+          }
         }
 
         // Deactivate ONE_TIME template

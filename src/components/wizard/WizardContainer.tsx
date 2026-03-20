@@ -100,6 +100,7 @@ export function WizardContainer() {
   const [state, setState] = useState<WizardState>(initialState)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // Warn on unsaved changes
   useEffect(() => {
@@ -153,16 +154,18 @@ export function WizardContainer() {
   }
 
   const handleNext = () => {
+    setValidationError(null)
+    
     if (state.step === 1 && !validateStep1()) {
-      alert('Please fill in all required fields')
+      setValidationError('Please fill in all required fields')
       return
     }
     if (state.step === 2 && !validateStep2()) {
-      alert('Please add at least one clause with clause number and title')
+      setValidationError('Please add at least one clause with clause number and title')
       return
     }
     if (state.step === 3 && !validateStep3()) {
-      alert('Please ensure all templates have required fields')
+      setValidationError('Please ensure all templates have required fields')
       return
     }
 
@@ -171,11 +174,13 @@ export function WizardContainer() {
   }
 
   const handleBack = () => {
+    setValidationError(null)
     setState((prev) => ({ ...prev, step: (prev.step - 1) as 1 | 2 | 3 | 4 }))
   }
 
   const handleSave = async (status: 'DRAFT' | 'ACTIVE') => {
     setIsSaving(true)
+    setValidationError(null)
 
     try {
       const response = await fetch('/api/sources/wizard-save', {
@@ -200,7 +205,7 @@ export function WizardContainer() {
         throw new Error(data.error?.message || 'Failed to save source')
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to save source')
+      setValidationError(error instanceof Error ? error.message : 'Failed to save source')
     } finally {
       setIsSaving(false)
     }
@@ -219,6 +224,31 @@ export function WizardContainer() {
         completedSteps={completedSteps}
         onStepClick={handleStepClick}
       />
+
+      {validationError && (
+        <div
+          className="mt-6 p-4 rounded-lg border-l-4 text-sm"
+          style={{
+            backgroundColor: 'rgba(255, 68, 79, 0.1)',
+            borderColor: 'var(--accent-red)',
+            color: 'var(--accent-red)',
+          }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="font-semibold mb-1">Validation Error</div>
+              <div style={{ color: 'var(--text-secondary)' }}>{validationError}</div>
+            </div>
+            <button
+              onClick={() => setValidationError(null)}
+              className="ml-4 text-lg leading-none"
+              style={{ color: 'var(--accent-red)' }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         {state.step === 1 && (
