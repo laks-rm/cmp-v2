@@ -85,6 +85,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate foreign keys exist
+    const [department, entities] = await Promise.all([
+      prisma.department.findUnique({
+        where: { id: source.department_id },
+        select: { id: true },
+      }),
+      prisma.entity.findMany({
+        where: { id: { in: source.entity_ids } },
+        select: { id: true },
+      }),
+    ])
+
+    if (!department) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid department selected',
+          },
+        },
+        { status: 400 }
+      )
+    }
+
+    if (entities.length !== source.entity_ids.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'One or more selected entities are invalid',
+          },
+        },
+        { status: 400 }
+      )
+    }
+
     // Bulk save in single transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Generate source code
