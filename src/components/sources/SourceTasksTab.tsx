@@ -24,9 +24,19 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
         setIsLoading(true)
         setError(null)
 
-        // This endpoint will be created in Step 10
-        // For now, return empty array
-        setTasks([])
+        const response = await fetch(`/api/sources/${sourceId}/tasks`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setTasks(data.data.tasks)
+        } else {
+          throw new Error(data.error?.message || 'Failed to load tasks')
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load tasks')
       } finally {
@@ -85,7 +95,7 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
     if (activeFilter === 'all') return true
     if (activeFilter === 'overdue') return task.status === 'OVERDUE'
     if (activeFilter === 'pending_review') return task.status === 'PENDING_REVIEW'
-    if (activeFilter === 'completed') return task.status === 'APPROVED' || task.status === 'CLOSED'
+    if (activeFilter === 'completed') return ['APPROVED', 'CLOSED'].includes(task.status)
     return true
   })
 
@@ -152,17 +162,17 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
                   {task.task_code}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--text-primary)' }}>
-                  {task.clause_number}
+                  {task.clause?.clause_number || 'N/A'}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--text-primary)' }}>
                   {task.title}
                 </td>
-                <td className="px-4 py-3">{task.entity_flag}</td>
+                <td className="px-4 py-3">{task.entity?.country_flag_emoji || ''}</td>
                 <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>
-                  {task.pic_name || 'Unassigned'}
+                  {task.pic_user?.name || 'Unassigned'}
                 </td>
                 <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>
-                  {task.due_date}
+                  {new Date(task.due_date).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
                   <span
@@ -186,8 +196,24 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="px-2 py-0.5 rounded text-xs font-medium">
-                    {task.status}
+                  <span
+                    className="px-2 py-0.5 rounded text-xs font-medium"
+                    style={{
+                      backgroundColor:
+                        task.status === 'OVERDUE'
+                          ? 'rgba(255, 68, 79, 0.1)'
+                          : task.status === 'APPROVED'
+                          ? 'rgba(52, 211, 153, 0.1)'
+                          : 'rgba(96, 165, 250, 0.1)',
+                      color:
+                        task.status === 'OVERDUE'
+                          ? 'var(--accent-red)'
+                          : task.status === 'APPROVED'
+                          ? 'var(--accent-green)'
+                          : 'var(--accent-blue)',
+                    }}
+                  >
+                    {task.status.replace(/_/g, ' ')}
                   </span>
                 </td>
                 <td className="px-4 py-3">
