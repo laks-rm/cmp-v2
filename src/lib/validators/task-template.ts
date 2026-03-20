@@ -77,8 +77,28 @@ export const createTemplateSchema = z
     }
   )
 
-// Update template schema (partial)
-export const updateTemplateSchema = createTemplateSchema.partial()
+// Update template schema (make base schema fields optional, then apply same refinements)
+const baseTemplateSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or less'),
+  description: z.string().max(5000, 'Description must be 5000 characters or less').optional(),
+  frequency: taskFrequencyEnum,
+  frequency_config: z.record(z.any()).optional(),
+  due_date_offset_days: z.number().int().positive('Due date offset must be a positive number'),
+  review_required: z.boolean(),
+  reviewer_logic: reviewerLogicEnum.optional().nullable(),
+  evidence_required: z.boolean(),
+  evidence_description: z.string().max(1000).optional().nullable(),
+  expected_outcome: z.string().max(2000).optional().nullable(),
+  priority: priorityEnum.default('MEDIUM'),
+  assignment_logic: assignmentLogicEnum.default('DEPARTMENT_QUEUE'),
+  reminder_days_before: z.array(z.number().int().positive()).default([]),
+  escalation_days_after: z.number().int().positive().optional().nullable(),
+  escalation_to: z.string().optional().nullable(),
+  is_active: z.boolean().default(true),
+  ai_generated: z.boolean().default(false),
+})
+
+export const updateTemplateSchema = baseTemplateSchema.partial()
 
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>
 export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>

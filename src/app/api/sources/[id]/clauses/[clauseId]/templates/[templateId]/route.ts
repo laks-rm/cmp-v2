@@ -122,7 +122,24 @@ export async function PUT(
     const template = await prisma.$transaction(async (tx) => {
       const updated = await tx.taskTemplate.update({
         where: { id: params.templateId },
-        data: validation.data,
+        data: {
+          title: validation.data.title,
+          description: validation.data.description,
+          frequency: validation.data.frequency as any,
+          frequency_config: validation.data.frequency_config as any,
+          due_date_offset_days: validation.data.due_date_offset_days,
+          review_required: validation.data.review_required,
+          reviewer_logic: validation.data.reviewer_logic as any,
+          evidence_required: validation.data.evidence_required,
+          evidence_description: validation.data.evidence_description,
+          expected_outcome: validation.data.expected_outcome,
+          priority: validation.data.priority as any,
+          assignment_logic: validation.data.assignment_logic as any,
+          reminder_days_before: validation.data.reminder_days_before,
+          escalation_days_after: validation.data.escalation_days_after,
+          escalation_to: validation.data.escalation_to,
+          is_active: validation.data.is_active,
+        },
       })
 
       // Write audit log

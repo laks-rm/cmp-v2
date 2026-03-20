@@ -8,7 +8,7 @@ interface BaseButtonProps {
   variant?: ButtonVariant
   size?: ButtonSize
   isLoading?: boolean
-  children: ReactNode
+  children?: ReactNode
   className?: string
 }
 
@@ -41,7 +41,6 @@ export function Button({
   isLoading = false,
   children,
   className = '',
-  disabled,
   ...props
 }: ButtonProps) {
   const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed'
@@ -63,7 +62,7 @@ export function Button({
   return (
     <button
       className={combinedClassName}
-      disabled={disabled || isLoading}
+      disabled={('disabled' in props && props.disabled) || isLoading}
       {...(props as ButtonHTMLAttributes<HTMLButtonElement>)}
     >
       {isLoading && <Spinner size={size} />}
