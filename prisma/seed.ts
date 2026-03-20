@@ -371,6 +371,9 @@ async function main() {
   })
 
   // Create task templates for clause 1.1
+  const today = new Date()
+  today.setHours(0, 0, 0, 0) // Set to start of day
+
   await prisma.taskTemplate.create({
     data: {
       clause_id: clause1_1.id,
@@ -379,7 +382,7 @@ async function main() {
       description: 'Review all flagged suspicious transactions from the monitoring system and submit STRs as required.',
       frequency: TaskFrequency.MONTHLY,
       frequency_config: { day_of_month: 5 },
-      due_date_offset_days: 5,
+      due_date_offset_days: 0,
       review_required: true,
       reviewer_logic: ReviewerLogic.SOURCE_REVIEWER,
       evidence_required: true,
@@ -393,6 +396,8 @@ async function main() {
       is_active: true,
       ai_generated: false,
       sequence_order: 1,
+      first_execution_date: today,
+      next_due_date: today,
     },
   })
 
@@ -404,7 +409,7 @@ async function main() {
       description: 'Confirm receipt of acknowledgments from authorities for all submitted STRs.',
       frequency: TaskFrequency.MONTHLY,
       frequency_config: { day_of_month: 20 },
-      due_date_offset_days: 20,
+      due_date_offset_days: 0,
       review_required: true,
       reviewer_logic: ReviewerLogic.SOURCE_REVIEWER,
       evidence_required: true,
@@ -418,6 +423,8 @@ async function main() {
       is_active: true,
       ai_generated: false,
       sequence_order: 2,
+      first_execution_date: today,
+      next_due_date: today,
     },
   })
 
@@ -430,7 +437,7 @@ async function main() {
       description: 'Review transaction monitoring system rules and thresholds. Update scenarios based on typologies and risk assessment.',
       frequency: TaskFrequency.QUARTERLY,
       frequency_config: { month_of_quarter: 1 },
-      due_date_offset_days: 15,
+      due_date_offset_days: 0,
       review_required: true,
       reviewer_logic: ReviewerLogic.DEPT_MANAGER,
       evidence_required: true,
@@ -444,6 +451,8 @@ async function main() {
       is_active: true,
       ai_generated: false,
       sequence_order: 1,
+      first_execution_date: today,
+      next_due_date: today,
     },
   })
 
@@ -518,7 +527,7 @@ async function main() {
       description: 'Review and respond to all data subject access requests within the required 30-day timeframe.',
       frequency: TaskFrequency.MONTHLY,
       frequency_config: { day_of_month: 10 },
-      due_date_offset_days: 10,
+      due_date_offset_days: 0,
       review_required: true,
       reviewer_logic: ReviewerLogic.SOURCE_REVIEWER,
       evidence_required: true,
@@ -532,6 +541,8 @@ async function main() {
       is_active: true,
       ai_generated: false,
       sequence_order: 1,
+      first_execution_date: today,
+      next_due_date: today,
     },
   })
 
@@ -544,7 +555,7 @@ async function main() {
       description: 'Review and process data erasure (right to be forgotten) requests ensuring all systems are updated.',
       frequency: TaskFrequency.QUARTERLY,
       frequency_config: { month_of_quarter: 1 },
-      due_date_offset_days: 15,
+      due_date_offset_days: 0,
       review_required: true,
       reviewer_logic: ReviewerLogic.SOURCE_REVIEWER,
       evidence_required: true,
@@ -558,6 +569,8 @@ async function main() {
       is_active: true,
       ai_generated: false,
       sequence_order: 1,
+      first_execution_date: today,
+      next_due_date: today,
     },
   })
 

@@ -137,8 +137,41 @@ export async function PUT(
       )
     }
 
+    // Get current source to check status change
+    const currentSource = await sourceService.getSource(params.id, decoded.userId)
+    if (!currentSource) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Source not found or access denied',
+          },
+        },
+        { status: 404 }
+      )
+    }
+
+    const oldStatus = currentSource.status
+    const newStatus = validation.data.status
+
     // Update source
     const source = await sourceService.updateSource(params.id, validation.data, decoded.userId)
+
+    // If status changed to ACTIVE, trigger task generation
+    if (newStatus === 'ACTIVE' && oldStatus !== 'ACTIVE') {
+      console.log(`🚀 Source status changed to ACTIVE, triggering task generation for ${params.id}`)
+      try {
+        const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
+        const taskGenResult = await generateTasksForSource(params.id)
+        console.log(
+          `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
+        )
+      } catch (error) {
+        console.error('Task generation error (non-blocking):', error)
+        // Don't fail the update if task generation fails
+      }
+    }
 
     return NextResponse.json(
       {

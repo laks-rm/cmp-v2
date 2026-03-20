@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/Button'
 
 interface SourceTasksTabProps {
   sourceId: string
+  source?: any // Add source object to access status
 }
 
-export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
+export function SourceTasksTab({ sourceId, source }: SourceTasksTabProps) {
   const router = useRouter()
   const { accessToken, user } = useAuth()
   const [tasks, setTasks] = useState<any[]>([])
@@ -18,6 +19,7 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
   const [activeFilter, setActiveFilter] = useState<string>('all')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateMessage, setGenerateMessage] = useState<string | null>(null)
+  const [autoRefreshCount, setAutoRefreshCount] = useState(0)
 
   const fetchTasks = async () => {
     if (!accessToken) return
@@ -88,6 +90,24 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
     fetchTasks()
   }, [sourceId, accessToken])
 
+  // Auto-refresh if source is ACTIVE but no tasks (up to 3 times, every 3 seconds)
+  useEffect(() => {
+    if (
+      source?.status === 'ACTIVE' &&
+      !isLoading &&
+      tasks.length === 0 &&
+      autoRefreshCount < 3
+    ) {
+      const timer = setTimeout(() => {
+        console.log(`Auto-refreshing tasks (attempt ${autoRefreshCount + 1}/3)`)
+        setAutoRefreshCount((prev) => prev + 1)
+        fetchTasks()
+      }, 3000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [source?.status, isLoading, tasks.length, autoRefreshCount])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -114,6 +134,51 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
 
   if (tasks.length === 0) {
     const isAdmin = user && ['SUPER_ADMIN', 'ADMIN'].includes(user.role)
+
+    // Banner for DRAFT sources
+    if (source?.status === 'DRAFT') {
+      return (
+        <div
+          className="p-6 rounded-lg border text-center"
+          style={{
+            backgroundColor: 'rgba(96, 165, 250, 0.1)',
+            borderColor: 'var(--accent-blue)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <div className="text-4xl mb-3">📋</div>
+          <div className="text-lg font-semibold mb-2">Source is in Draft Status</div>
+          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Activate this source to start generating tasks automatically.
+          </div>
+        </div>
+      )
+    }
+
+    // Banner for ACTIVE sources with no tasks (generating)
+    if (source?.status === 'ACTIVE' && autoRefreshCount < 3) {
+      return (
+        <div
+          className="p-6 rounded-lg border text-center"
+          style={{
+            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+            borderColor: 'var(--accent-green)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <div className="flex items-center justify-center mb-3">
+            <div
+              className="animate-spin rounded-full h-8 w-8 border-b-2"
+              style={{ borderColor: 'var(--accent-green)' }}
+            />
+          </div>
+          <div className="text-lg font-semibold mb-2">Tasks are being generated...</div>
+          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Please wait, this page will refresh automatically.
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="space-y-4">
@@ -146,22 +211,18 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
             No tasks have been generated yet
           </div>
           <div className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-            Tasks are created automatically by the scheduler based on task templates.
+            Tasks are created automatically based on the first execution date you set in task templates.
           </div>
           <div
             className="text-xs mb-4 max-w-md mx-auto"
             style={{ color: 'var(--text-tertiary)' }}
           >
-            <strong>Note:</strong> Tasks are generated based on frequency rules:
+            <strong>Note:</strong> Tasks generate when the first execution date arrives:
             <br />
-            • DAILY tasks generate every day
+            • Tasks are generated automatically when their due date is reached
             <br />
-            • WEEKLY tasks generate on Mondays
-            <br />
-            • MONTHLY tasks generate on the 1st of each month
-            <br />
-            • QUARTERLY tasks generate on the 1st of Jan, Apr, Jul, Oct
-            <br />• ONE_TIME tasks generate once
+            • Check the "Clauses &amp; Templates" tab to see your configured templates
+            <br />• Future tasks can be previewed in the Calendar view
           </div>
 
           {isAdmin && (

@@ -328,8 +328,8 @@ export default function TaskDetailPage() {
   }
 
   const isOverdue = new Date(task.due_date) < new Date()
-  const isPIC = user?.userId === task.pic_user?.id
-  const isReviewer = user?.userId === task.reviewer_user?.id
+  const isPIC = user?.id === task.pic_user?.id
+  const isReviewer = user?.id === task.reviewer_user?.id
   const isManager = ['SUPER_ADMIN', 'ADMIN', 'CMP_MANAGER', 'DEPT_MANAGER'].includes(user?.role || '')
 
   const canStart = isPIC && ['NOT_STARTED', 'OVERDUE'].includes(task.status)

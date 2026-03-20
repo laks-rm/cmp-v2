@@ -255,8 +255,8 @@ export default function AddUserPage() {
               Entity Access
             </label>
             <EntityPicker
-              value={formData.entity_access}
-              onChange={(entities) => setFormData({ ...formData, entity_access: entities })}
+              selectedEntityIds={formData.entity_access}
+              onSelect={(entities) => setFormData({ ...formData, entity_access: entities })}
             />
             <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
               User will only see data from selected entities

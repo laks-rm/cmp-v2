@@ -17,6 +17,7 @@ interface WizardTemplate {
   frequency: string
   frequency_config?: any
   due_date_offset_days: number
+  first_execution_date: string
   review_required: boolean
   reviewer_logic?: string | null
   evidence_required: boolean
@@ -123,6 +124,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate clause numbers are unique
+    if (clauses && Array.isArray(clauses)) {
+      const clauseNumbers = clauses.map((c: WizardClause) => c.clause_number?.trim()).filter(Boolean)
+      const uniqueClauseNumbers = new Set(clauseNumbers)
+      if (clauseNumbers.length !== uniqueClauseNumbers.size) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Duplicate clause numbers detected. Each clause must have a unique clause number.',
+            },
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     // Bulk save in single transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Generate source code
@@ -204,7 +223,9 @@ export async function POST(request: NextRequest) {
                   description: templateData.description,
                   frequency: templateData.frequency as any,
                   frequency_config: templateData.frequency_config,
-                  due_date_offset_days: templateData.due_date_offset_days,
+                  due_date_offset_days: templateData.due_date_offset_days || 0,
+                  first_execution_date: new Date(templateData.first_execution_date),
+                  next_due_date: new Date(templateData.first_execution_date),
                   review_required: templateData.review_required,
                   reviewer_logic: templateData.reviewer_logic as any,
                   evidence_required: templateData.evidence_required,
@@ -279,12 +300,28 @@ export async function POST(request: NextRequest) {
       return {
         source_id: newSource.id,
         code: newSource.code,
+        status: newSource.status,
         stats: {
           clauses_created: clausesCreated,
           templates_created: templatesCreated,
         },
       }
     })
+
+    // If source is ACTIVE, trigger task generation immediately
+    if (source.status === 'ACTIVE') {
+      console.log(`🚀 Source activated, triggering immediate task generation for ${result.source_id}`)
+      try {
+        const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
+        const taskGenResult = await generateTasksForSource(result.source_id)
+        console.log(
+          `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
+        )
+      } catch (error) {
+        console.error('Task generation error (non-blocking):', error)
+        // Don't fail the source creation if task generation fails
+      }
+    }
 
     return NextResponse.json(
       {

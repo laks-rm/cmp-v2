@@ -349,6 +349,8 @@ model TaskTemplate {
   is_active               Boolean         @default(true)
   ai_generated            Boolean         @default(false)
   sequence_order          Int
+  first_execution_date    DateTime        @db.Date
+  next_due_date           DateTime?       @db.Date
   created_at              DateTime        @default(now())
   updated_at              DateTime        @updatedAt
 
@@ -359,6 +361,7 @@ model TaskTemplate {
 
   @@index([clause_id])
   @@index([source_id])
+  @@index([next_due_date])
   @@map("task_templates")
 }
 

@@ -131,7 +131,7 @@ export default function SourceDetailPage() {
       <div>
         {activeTab === 'overview' && <SourceOverviewTab source={source} />}
         {activeTab === 'clauses' && <SourceClausesTab source={source} onUpdate={fetchSource} />}
-        {activeTab === 'tasks' && <SourceTasksTab sourceId={source.id} />}
+        {activeTab === 'tasks' && <SourceTasksTab sourceId={source.id} source={source} />}
         {activeTab === 'audit' && <SourceAuditTab sourceId={source.id} />}
       </div>
     </div>

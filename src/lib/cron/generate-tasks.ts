@@ -1,115 +1,11 @@
 import prisma from '@/lib/prisma'
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfQuarter,
-  endOfQuarter,
-  startOfYear,
-  endOfYear,
-  addDays,
-  differenceInWeeks,
-  differenceInMonths,
-  isFirstDayOfMonth,
-  isMonday,
-  format,
-} from 'date-fns'
+import { addDays, format, startOfDay } from 'date-fns'
+import { calculateNextOccurrence, calculatePeriodForDate } from '@/lib/utils/frequency'
 
 interface TaskGenerationResult {
   tasks_created: number
   tasks_skipped: number
   errors: string[]
-}
-
-/**
- * Calculate period start and end dates based on frequency
- */
-function calculatePeriod(frequency: string, referenceDate: Date = new Date()): {
-  period_start: Date
-  period_end: Date
-  shouldGenerate: boolean
-} {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  switch (frequency) {
-    case 'DAILY':
-      return {
-        period_start: today,
-        period_end: today,
-        shouldGenerate: true, // Generate every day
-      }
-
-    case 'WEEKLY':
-      return {
-        period_start: startOfWeek(today, { weekStartsOn: 1 }), // Monday
-        period_end: endOfWeek(today, { weekStartsOn: 1 }),
-        shouldGenerate: isMonday(today), // Only generate on Mondays
-      }
-
-    case 'BI_WEEKLY': {
-      // Calculate bi-weekly periods starting from a reference date (e.g., Jan 1, 2024)
-      const referenceStart = new Date(2024, 0, 1) // Jan 1, 2024 (Monday)
-      const weeksSinceReference = differenceInWeeks(today, referenceStart)
-      const biWeeklyPeriod = Math.floor(weeksSinceReference / 2)
-      const periodStart = addDays(referenceStart, biWeeklyPeriod * 14)
-      
-      return {
-        period_start: periodStart,
-        period_end: addDays(periodStart, 13),
-        shouldGenerate: today.getTime() === periodStart.getTime(),
-      }
-    }
-
-    case 'MONTHLY':
-      return {
-        period_start: startOfMonth(today),
-        period_end: endOfMonth(today),
-        shouldGenerate: isFirstDayOfMonth(today),
-      }
-
-    case 'QUARTERLY':
-      return {
-        period_start: startOfQuarter(today),
-        period_end: endOfQuarter(today),
-        shouldGenerate: today.getDate() === 1 && [0, 3, 6, 9].includes(today.getMonth()),
-      }
-
-    case 'SEMI_ANNUALLY': {
-      const month = today.getMonth()
-      const year = today.getFullYear()
-      const isFirstHalf = month < 6
-      
-      return {
-        period_start: new Date(year, isFirstHalf ? 0 : 6, 1),
-        period_end: new Date(year, isFirstHalf ? 5 : 11, isFirstHalf ? 30 : 31),
-        shouldGenerate: today.getDate() === 1 && (month === 0 || month === 6),
-      }
-    }
-
-    case 'ANNUALLY':
-      return {
-        period_start: startOfYear(today),
-        period_end: endOfYear(today),
-        shouldGenerate: today.getDate() === 1 && today.getMonth() === 0, // Jan 1
-      }
-
-    case 'ONE_TIME':
-      // For one-time tasks, use the source's effective_from date
-      return {
-        period_start: referenceDate,
-        period_end: referenceDate,
-        shouldGenerate: true, // Will be checked against template is_active
-      }
-
-    default:
-      return {
-        period_start: today,
-        period_end: today,
-        shouldGenerate: false,
-      }
-  }
 }
 
 /**
@@ -175,31 +71,29 @@ function determineReviewer(
 }
 
 /**
- * Main task generation function
+ * Main task generation function — anchor-based
  */
 export async function generateTasks(): Promise<TaskGenerationResult> {
-  const result: TaskGenerationResult = {
-    tasks_created: 0,
-    tasks_skipped: 0,
-    errors: [],
-  }
+  const result: TaskGenerationResult = { tasks_created: 0, tasks_skipped: 0, errors: [] }
+  const today = startOfDay(new Date())
 
-  console.log('🚀 Starting task generation...')
-  console.log(`📅 Date: ${format(new Date(), 'yyyy-MM-dd')}`)
+  console.log(`🚀 Task generation started — ${format(today, 'yyyy-MM-dd')}`)
 
   try {
-    // Query all active task templates with active clauses and active sources
+    // Query templates where next_due_date is today or in the past (catch-up for missed days)
+    // AND template is active, clause is active, source is ACTIVE
+    // AND frequency is not AD_HOC
     const templates = await prisma.taskTemplate.findMany({
       where: {
         is_active: true,
-        frequency: {
-          not: 'AD_HOC', // Exclude ad-hoc tasks
+        next_due_date: {
+          lte: today, // Due today or overdue (catch-up)
+          not: null,
         },
+        frequency: { not: 'AD_HOC' },
         clause: {
           is_active: true,
-          source: {
-            status: 'ACTIVE',
-          },
+          source: { status: 'ACTIVE' },
         },
       },
       include: {
@@ -207,11 +101,7 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
           include: {
             source: {
               include: {
-                entities_in_scope: {
-                  include: {
-                    entity: true,
-                  },
-                },
+                entities_in_scope: { include: { entity: true } },
                 department: true,
                 pic_user: true,
                 reviewer_user: true,
@@ -222,55 +112,94 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
       },
     })
 
-    console.log(`📋 Found ${templates.length} active templates to process`)
+    return await processTemplates(templates, result, today)
+  } catch (error) {
+    const msg = `Fatal: ${error instanceof Error ? error.message : 'Unknown'}`
+    console.error(`💥 ${msg}`)
+    result.errors.push(msg)
+  }
 
-    // Process each template
-    for (const template of templates) {
-      const source = template.clause.source
+  return result
+}
 
-      try {
-        // Calculate period for this frequency
-        const { period_start, period_end, shouldGenerate } = calculatePeriod(
-          template.frequency,
-          new Date(source.effective_from)
-        )
+/**
+ * Generate tasks for a specific source only
+ */
+export async function generateTasksForSource(sourceId: string): Promise<TaskGenerationResult> {
+  const result: TaskGenerationResult = { tasks_created: 0, tasks_skipped: 0, errors: [] }
+  const today = startOfDay(new Date())
 
-        if (!shouldGenerate) {
-          console.log(
-            `⏭️  Skipping template ${template.id} (${template.frequency}): Not the first day of period`
-          )
-          continue
-        }
+  console.log(`🚀 Task generation started for source ${sourceId} — ${format(today, 'yyyy-MM-dd')}`)
 
-        console.log(
-          `✅ Processing template: ${template.title} (${template.frequency}) for source: ${source.code}`
-        )
-
-        // For ONE_TIME tasks, deactivate the template after generation
-        let shouldDeactivate = false
-        if (template.frequency === 'ONE_TIME') {
-          // Check if already generated
-          const existingOneTime = await prisma.taskInstance.findFirst({
-            where: {
-              task_template_id: template.id,
+  try {
+    // Query templates for this specific source
+    const templates = await prisma.taskTemplate.findMany({
+      where: {
+        source_id: sourceId,
+        is_active: true,
+        next_due_date: {
+          lte: today,
+          not: null,
+        },
+        frequency: { not: 'AD_HOC' },
+        clause: {
+          is_active: true,
+          source: { status: 'ACTIVE' },
+        },
+      },
+      include: {
+        clause: {
+          include: {
+            source: {
+              include: {
+                entities_in_scope: { include: { entity: true } },
+                department: true,
+                pic_user: true,
+                reviewer_user: true,
+              },
             },
-          })
+          },
+        },
+      },
+    })
 
-          if (existingOneTime) {
-            console.log(`⏭️  ONE_TIME task already generated for template ${template.id}`)
-            result.tasks_skipped++
-            continue
-          }
+    return await processTemplates(templates, result, today)
+  } catch (error) {
+    const msg = `Fatal: ${error instanceof Error ? error.message : 'Unknown'}`
+    console.error(`💥 ${msg}`)
+    result.errors.push(msg)
+  }
 
-          shouldDeactivate = true
-        }
+  return result
+}
 
-        // Generate tasks for each entity in scope
+/**
+ * Shared logic to process templates and generate tasks
+ */
+async function processTemplates(
+  templates: any[],
+  result: TaskGenerationResult,
+  today: Date
+): Promise<TaskGenerationResult> {
+  console.log(`📋 Found ${templates.length} templates ready for generation`)
+
+  for (const template of templates) {
+    const source = template.clause.source
+
+    try {
+      const dueDate = template.next_due_date!
+      const { period_start, period_end } = calculatePeriodForDate(dueDate, template.frequency)
+
+      console.log(
+        `✅ Processing: "${template.title}" (${template.frequency}) — due ${format(dueDate, 'yyyy-MM-dd')}`
+      )
+
+        // Generate one task per entity in scope
         for (const sourceEntity of source.entities_in_scope) {
           const entity = sourceEntity.entity
 
-          // Idempotency check
-          const existingTask = await prisma.taskInstance.findFirst({
+          // Idempotency: check if task already exists for this template + period + entity
+          const existing = await prisma.taskInstance.findFirst({
             where: {
               task_template_id: template.id,
               period_start: period_start,
@@ -278,18 +207,15 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
             },
           })
 
-          if (existingTask) {
+          if (existing) {
             console.log(
-              `⏭️  Task already exists for template ${template.id}, entity ${entity.code}, period ${format(period_start, 'yyyy-MM-dd')}`
+              `⏭️  Already exists: ${template.title} / ${entity.code} / ${format(period_start, 'yyyy-MM-dd')}`
             )
             result.tasks_skipped++
             continue
           }
 
-          // Calculate due date
-          const due_date = addDays(period_start, template.due_date_offset_days)
-
-          // Determine assignments
+          // Determine PIC and reviewer
           const pic_user_id = determinePIC(
             template.assignment_logic,
             source.pic_user_id,
@@ -299,12 +225,9 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
             ? determineReviewer(template.reviewer_logic, source.reviewer_user_id, null)
             : null
 
-          // Create task in transaction with retry logic for race conditions
-          let retries = 0
-          const maxRetries = 3
-          let taskCreated = false
-
-          while (!taskCreated && retries < maxRetries) {
+          // Create task with retry for task_code collision
+          let created = false
+          for (let attempt = 0; attempt < 3 && !created; attempt++) {
             try {
               await prisma.$transaction(async (tx) => {
                 const task_code = await generateTaskCode(tx)
@@ -325,7 +248,7 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
                     assignment_status: pic_user_id ? 'ASSIGNED' : 'UNASSIGNED',
                     period_start,
                     period_end,
-                    due_date,
+                    due_date: dueDate,
                     priority: template.priority,
                     review_required: template.review_required,
                     evidence_required: template.evidence_required,
@@ -335,7 +258,6 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
                   },
                 })
 
-                // Write audit log
                 await tx.auditLog.create({
                   data: {
                     action_type: 'task_created',
@@ -344,61 +266,61 @@ export async function generateTasks(): Promise<TaskGenerationResult> {
                     source_id: source.id,
                     entity_id: entity.id,
                     department_id: source.department_id,
-                    channel: 'SYSTEM',
+                    channel: 'CRON',
                     success: true,
                     new_value: {
                       task_code: task.task_code,
                       title: task.title,
                       entity: entity.code,
-                      due_date: format(due_date, 'yyyy-MM-dd'),
+                      due_date: format(dueDate, 'yyyy-MM-dd'),
                     },
                   },
                 })
 
                 console.log(
-                  `✨ Created task ${task.task_code} for entity ${entity.code} (due: ${format(due_date, 'yyyy-MM-dd')})`
+                  `✨ Created ${task.task_code} for ${entity.code} (due: ${format(dueDate, 'yyyy-MM-dd')})`
                 )
                 result.tasks_created++
-                taskCreated = true
+                created = true
               })
-            } catch (error: any) {
-              if (error.code === 'P2002' && retries < maxRetries - 1) {
-                console.log(
-                  `⚠️  Task code collision detected, retrying (attempt ${retries + 1}/${maxRetries})...`
-                )
-                retries++
-                await new Promise((resolve) => setTimeout(resolve, 100))
+            } catch (err: any) {
+              if (err.code === 'P2002' && attempt < 2) {
+                await new Promise((r) => setTimeout(r, 100))
               } else {
-                throw error
+                throw err
               }
             }
           }
         }
 
-        // Deactivate ONE_TIME template
-        if (shouldDeactivate) {
-          await prisma.taskTemplate.update({
-            where: { id: template.id },
-            data: { is_active: false },
-          })
-          console.log(`🔒 Deactivated ONE_TIME template ${template.id}`)
-        }
-      } catch (error) {
-        const errorMsg = `Failed to process template ${template.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        console.error(`❌ ${errorMsg}`)
-        result.errors.push(errorMsg)
-      }
-    }
+        // Advance next_due_date to the next occurrence
+        const nextDue = calculateNextOccurrence(dueDate, template.frequency)
 
-    console.log('\n📊 Task Generation Summary:')
-    console.log(`   ✅ Created: ${result.tasks_created}`)
-    console.log(`   ⏭️  Skipped: ${result.tasks_skipped}`)
-    console.log(`   ❌ Errors: ${result.errors.length}`)
-  } catch (error) {
-    const errorMsg = `Fatal error in task generation: ${error instanceof Error ? error.message : 'Unknown error'}`
-    console.error(`💥 ${errorMsg}`)
-    result.errors.push(errorMsg)
+        await prisma.taskTemplate.update({
+          where: { id: template.id },
+          data: {
+            next_due_date: nextDue,
+            // For ONE_TIME: deactivate the template
+            ...(template.frequency === 'ONE_TIME' ? { is_active: false } : {}),
+          },
+        })
+
+        if (nextDue) {
+          console.log(`📅 Next due for "${template.title}": ${format(nextDue, 'yyyy-MM-dd')}`)
+        } else {
+          console.log(`🔒 Template "${template.title}" completed (${template.frequency})`)
+        }
+      }
+    } catch (error) {
+      const msg = `Failed: template ${template.id} — ${error instanceof Error ? error.message : 'Unknown'}`
+      console.error(`❌ ${msg}`)
+      result.errors.push(msg)
+    }
   }
+
+  console.log(
+    `\n📊 Summary: ${result.tasks_created} created, ${result.tasks_skipped} skipped, ${result.errors.length} errors`
+  )
 
   return result
 }

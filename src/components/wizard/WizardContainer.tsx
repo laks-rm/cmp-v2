@@ -27,6 +27,7 @@ export interface WizardTemplate {
   frequency: string
   frequency_config?: any
   due_date_offset_days: number
+  first_execution_date: string
   review_required: boolean
   reviewer_logic?: string | null
   evidence_required: boolean
@@ -136,7 +137,19 @@ export function WizardContainer() {
 
   const validateStep2 = (): boolean => {
     if (state.clauses.length === 0) return false
-    return state.clauses.every((c) => c.clause_number && c.title)
+    
+    // Check all clauses have clause_number and title
+    const allHaveRequiredFields = state.clauses.every((c) => c.clause_number && c.title)
+    if (!allHaveRequiredFields) return false
+    
+    // Check for duplicate clause numbers
+    const clauseNumbers = state.clauses.map((c) => c.clause_number.trim())
+    const uniqueClauseNumbers = new Set(clauseNumbers)
+    if (clauseNumbers.length !== uniqueClauseNumbers.size) {
+      return false // Duplicate clause numbers found
+    }
+    
+    return true
   }
 
   const validateStep3 = (): boolean => {
@@ -144,6 +157,7 @@ export function WizardContainer() {
     for (const clause of state.clauses) {
       for (const template of clause.task_templates) {
         if (!template.title) return false
+        if (!template.first_execution_date) return false
         if (template.review_required && !template.reviewer_logic) return false
         if (template.escalation_days_after && template.escalation_days_after > 0 && !template.escalation_to) {
           return false
@@ -161,7 +175,14 @@ export function WizardContainer() {
       return
     }
     if (state.step === 2 && !validateStep2()) {
-      setValidationError('Please add at least one clause with clause number and title')
+      // Check for duplicate clause numbers specifically
+      const clauseNumbers = state.clauses.map((c) => c.clause_number.trim())
+      const uniqueClauseNumbers = new Set(clauseNumbers)
+      if (clauseNumbers.length !== uniqueClauseNumbers.size) {
+        setValidationError('Duplicate clause numbers detected. Each clause must have a unique clause number.')
+      } else {
+        setValidationError('Please add at least one clause with clause number and title')
+      }
       return
     }
     if (state.step === 3 && !validateStep3()) {

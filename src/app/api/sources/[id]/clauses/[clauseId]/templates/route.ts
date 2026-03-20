@@ -116,7 +116,13 @@ export async function POST(
           description: validation.data.description,
           frequency: validation.data.frequency as any,
           frequency_config: (validation.data.frequency_config as any) || null,
-          due_date_offset_days: validation.data.due_date_offset_days,
+          due_date_offset_days: validation.data.due_date_offset_days || 0,
+          first_execution_date: validation.data.first_execution_date
+            ? new Date(validation.data.first_execution_date)
+            : new Date(),
+          next_due_date: validation.data.first_execution_date
+            ? new Date(validation.data.first_execution_date)
+            : new Date(),
           review_required: validation.data.review_required,
           reviewer_logic: validation.data.reviewer_logic as any,
           evidence_required: validation.data.evidence_required,

@@ -26,7 +26,8 @@ export function Step3TaskTemplates({ state, updateState }: Step3Props) {
       title: '',
       description: '',
       frequency: 'MONTHLY',
-      due_date_offset_days: 5,
+      due_date_offset_days: 0,
+      first_execution_date: state.source.effective_from || new Date().toISOString().split('T')[0],
       review_required: false,
       reviewer_logic: null,
       evidence_required: false,
@@ -231,7 +232,7 @@ export function Step3TaskTemplates({ state, updateState }: Step3Props) {
                           </button>
                         </div>
 
-                        {/* Row 2: Frequency, Due Offset */}
+                        {/* Row 2: Frequency, First Task Due Date */}
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>
@@ -258,20 +259,19 @@ export function Step3TaskTemplates({ state, updateState }: Step3Props) {
                           </div>
                           <div>
                             <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>
-                              Due Offset Days
+                              First Task Due Date
                             </label>
                             <input
-                              type="number"
-                              value={template.due_date_offset_days}
+                              type="date"
+                              value={template.first_execution_date}
                               onChange={(e) =>
                                 handleUpdateTemplate(
                                   clause.temp_id,
                                   template.temp_id,
-                                  'due_date_offset_days',
-                                  parseInt(e.target.value) || 1
+                                  'first_execution_date',
+                                  e.target.value
                                 )
                               }
-                              min="1"
                               className="w-full px-3 py-2 rounded text-sm"
                               style={{
                                 backgroundColor: 'var(--bg-tertiary)',

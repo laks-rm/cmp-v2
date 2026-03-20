@@ -28,6 +28,7 @@ const navigationSections: NavSection[] = [
       { label: 'Sources', icon: '📋', href: '/sources' },
       { label: 'Task Plans', icon: '📝', href: '/task-plans' },
       { label: 'Task Tracker', icon: '✅', href: '/tasks', badge: 12 },
+      { label: 'Calendar', icon: '📅', href: '/calendar' },
       { label: 'Review Queue', icon: '👁️', href: '/review', badge: 5 },
     ],
   },

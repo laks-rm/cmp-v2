@@ -522,3 +522,42 @@ export interface ReviewQueueStats {
   approved_last_7d: number
   sla_breach: number
 }
+
+// ===================================
+// CALENDAR TYPES
+// ===================================
+
+export interface CalendarGeneratedTask {
+  id: string
+  task_code: string
+  title: string
+  due_date: string
+  status: string
+  priority: string
+  entity: { name: string; code: string; country_flag_emoji: string }
+  source: { code: string; title: string }
+  clause: { clause_number: string; title: string }
+  pic_user: { name: string } | null
+}
+
+export interface CalendarProjectedTask {
+  template_id: string
+  source_code: string
+  source_title: string
+  clause_number: string
+  clause_title: string
+  task_title: string
+  entity_code: string
+  entity_name: string
+  entity_flag: string
+  projected_due_date: string
+  frequency: string
+  priority: string
+}
+
+export interface CalendarData {
+  generated_tasks: CalendarGeneratedTask[]
+  projected_tasks: CalendarProjectedTask[]
+  date_range: { from: string; to: string }
+}
+
