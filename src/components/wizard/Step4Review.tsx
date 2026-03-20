@@ -7,9 +7,10 @@ interface Step4Props {
   state: WizardState
   isSaving: boolean
   onSave: (status: 'DRAFT' | 'ACTIVE') => void
+  onBack: () => void
 }
 
-export function Step4Review({ state, isSaving, onSave }: Step4Props) {
+export function Step4Review({ state, isSaving, onSave, onBack }: Step4Props) {
   const [selectedStatus, setSelectedStatus] = useState<'DRAFT' | 'ACTIVE'>('DRAFT')
 
   const totalTemplates = state.clauses.reduce((sum, c) => sum + c.task_templates.length, 0)
@@ -205,7 +206,7 @@ export function Step4Review({ state, isSaving, onSave }: Step4Props) {
       {/* Action Buttons */}
       <div className="flex items-center justify-between pt-4">
         <button
-          onClick={() => window.history.back()}
+          onClick={onBack}
           disabled={isSaving}
           className="px-6 py-2 rounded-lg font-medium transition-all disabled:opacity-50"
           style={{

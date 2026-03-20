@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/auth-context'
 import { WizardState } from './WizardContainer'
 import { EntityPicker } from '@/components/shared/EntityPicker'
 
@@ -9,10 +10,43 @@ interface Step1Props {
   updateState: (updates: Partial<WizardState>) => void
 }
 
+interface Department {
+  id: string
+  name: string
+  code: string
+}
+
 export function Step1SourceInfo({ state, updateState }: Step1Props) {
+  const { accessToken } = useAuth()
   const [entryMode, setEntryMode] = useState<'manual' | 'ai'>('manual')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [loadingDepartments, setLoadingDepartments] = useState(false)
 
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      if (!accessToken) return
+      
+      setLoadingDepartments(true)
+      try {
+        const response = await fetch('/api/admin/departments', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+        const result = await response.json()
+        if (result.success && result.data?.departments) {
+          setDepartments(result.data.departments)
+        }
+      } catch (error) {
+        console.error('Failed to fetch departments:', error)
+      } finally {
+        setLoadingDepartments(false)
+      }
+    }
+
+    fetchDepartments()
+  }, [accessToken])
   const handleFieldChange = (field: string, value: any) => {
     updateState({
       source: {
@@ -211,17 +245,28 @@ export function Step1SourceInfo({ state, updateState }: Step1Props) {
             <select
               value={state.source.department_id}
               onChange={(e) => handleFieldChange('department_id', e.target.value)}
+              onBlur={(e) => validateField('department_id', e.target.value)}
               className="w-full input-primary"
               style={{
                 backgroundColor: 'var(--bg-tertiary)',
-                borderColor: 'var(--border-primary)',
+                borderColor: errors.department_id ? 'var(--accent-red)' : 'var(--border-primary)',
               }}
+              disabled={loadingDepartments}
             >
-              <option value="">Select department...</option>
-              <option value="dept-1">Compliance Operations</option>
-              <option value="dept-2">AML/CFT</option>
-              <option value="dept-3">Risk Management</option>
+              <option value="">
+                {loadingDepartments ? 'Loading departments...' : 'Select department...'}
+              </option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
             </select>
+            {errors.department_id && (
+              <p className="text-xs mt-1" style={{ color: 'var(--accent-red)' }}>
+                {errors.department_id}
+              </p>
+            )}
           </div>
 
           {/* Effective From */}

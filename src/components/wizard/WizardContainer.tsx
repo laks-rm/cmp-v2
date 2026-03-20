@@ -261,7 +261,7 @@ export function WizardContainer() {
           <Step3TaskTemplates state={state} updateState={updateState} />
         )}
         {state.step === 4 && (
-          <Step4Review state={state} isSaving={isSaving} onSave={handleSave} />
+          <Step4Review state={state} isSaving={isSaving} onSave={handleSave} onBack={handleBack} />
         )}
       </div>
 
