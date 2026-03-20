@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useAuth } from '@/lib/auth-context'
 
 interface Entity {
   id: string
@@ -29,6 +30,7 @@ export function EntityPicker({
   placeholder = 'Search entities...',
   error,
 }: EntityPickerProps) {
+  const { accessToken } = useAuth()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -37,9 +39,15 @@ export function EntityPicker({
 
   useEffect(() => {
     const fetchEntities = async () => {
+      if (!accessToken) return
+      
       setLoading(true)
       try {
-        const response = await fetch('/api/entities')
+        const response = await fetch('/api/entities', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
         const result = await response.json()
         if (result.success && result.data?.groups) {
           setGroups(result.data.groups)
@@ -54,7 +62,7 @@ export function EntityPicker({
     if (isOpen && groups.length === 0) {
       fetchEntities()
     }
-  }, [isOpen, groups.length])
+  }, [isOpen, groups.length, accessToken])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
