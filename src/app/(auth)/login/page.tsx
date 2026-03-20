@@ -12,6 +12,20 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({})
   const [isLoading, setIsLoading] = useState(false)
 
+  // Test users for easy login
+  const testUsers = [
+    { role: 'Super Admin', email: 'admin@deriv.com', password: 'password123', color: 'var(--accent-red)' },
+    { role: 'CMP Manager', email: 'cmp.manager@deriv.com', password: 'password123', color: 'var(--accent-purple)' },
+    { role: 'Dept Manager', email: 'dept.manager@deriv.com', password: 'password123', color: 'var(--accent-amber)' },
+    { role: 'Reviewer', email: 'reviewer@deriv.com', password: 'password123', color: 'var(--accent-blue)' },
+    { role: 'PIC', email: 'pic@deriv.com', password: 'password123', color: 'var(--accent-green)' },
+  ]
+
+  const quickLogin = (user: typeof testUsers[0]) => {
+    setEmail(user.email)
+    setPassword(user.password)
+  }
+
   // Validate email on blur
   const validateEmail = (value: string) => {
     if (!value) {
@@ -89,9 +103,43 @@ export default function LoginPage() {
 
   return (
     <div 
-      className="w-full max-w-md"
+      className="w-full max-w-4xl"
       style={{ animation: 'slideIn 0.3s ease-out' }}
     >
+      {/* Test User Cards */}
+      <div className="mb-6">
+        <p className="text-sm mb-3 text-center" style={{ color: 'var(--text-secondary)' }}>
+          Quick Login (Test Users)
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {testUsers.map((user) => (
+            <button
+              key={user.email}
+              onClick={() => quickLogin(user)}
+              className="p-3 rounded-lg border text-center hover:opacity-80 transition-all"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                borderColor: user.color,
+                borderWidth: '2px',
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center text-white font-bold"
+                style={{ backgroundColor: user.color }}
+              >
+                {user.role.charAt(0)}
+              </div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+                {user.role}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Click to fill
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Card */}
       <div
         className="rounded-lg p-8 shadow-lg"
