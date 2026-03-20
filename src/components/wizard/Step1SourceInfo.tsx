@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { WizardState } from './WizardContainer'
+import { EntityPicker } from '@/components/shared/EntityPicker'
 
 interface Step1Props {
   state: WizardState
@@ -280,21 +281,17 @@ export function Step1SourceInfo({ state, updateState }: Step1Props) {
         </div>
       </div>
 
-      {/* Entities Placeholder */}
+      {/* Entities Picker */}
       <div>
         <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
           Entities in Scope <span style={{ color: 'var(--accent-red)' }}>*</span>
         </label>
-        <div
-          className="p-4 rounded-lg border text-sm"
-          style={{
-            backgroundColor: 'var(--bg-tertiary)',
-            borderColor: 'var(--border-primary)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          EntityPicker component will be rendered here (requires Step 4 UI components)
-        </div>
+        <EntityPicker
+          selectedEntityIds={state.source.entity_ids || []}
+          onSelect={(ids) => handleFieldChange('entity_ids', ids)}
+          placeholder="Search entities..."
+          error={errors.entity_ids}
+        />
       </div>
     </div>
   )
