@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/Button'
 
 interface SourceTasksTabProps {
   sourceId: string
@@ -10,40 +11,80 @@ interface SourceTasksTabProps {
 
 export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
   const router = useRouter()
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const [tasks, setTasks] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('all')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generateMessage, setGenerateMessage] = useState<string | null>(null)
+
+  const fetchTasks = async () => {
+    if (!accessToken) return
+
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const response = await fetch(`/api/sources/${sourceId}/tasks`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setTasks(data.data.tasks)
+      } else {
+        throw new Error(data.error?.message || 'Failed to load tasks')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tasks')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGenerateTasks = async () => {
+    setIsGenerating(true)
+    setGenerateMessage(null)
+
+    try {
+      const response = await fetch('/api/cron/generate-tasks', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        const result = data.data
+        setGenerateMessage(
+          `✓ Task generation completed: ${result.tasks_created} created, ${result.tasks_skipped} skipped${
+            result.errors.length > 0 ? `, ${result.errors.length} errors` : ''
+          }`
+        )
+        
+        // Refresh tasks list
+        setTimeout(() => {
+          fetchTasks()
+        }, 1000)
+      } else {
+        setGenerateMessage(`✗ ${data.error?.message || 'Failed to generate tasks'}`)
+      }
+    } catch (err) {
+      setGenerateMessage(`✗ ${err instanceof Error ? err.message : 'Failed to generate tasks'}`)
+    } finally {
+      setIsGenerating(false)
+      // Clear message after 5 seconds
+      setTimeout(() => setGenerateMessage(null), 5000)
+    }
+  }
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      if (!accessToken) return
-
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        const response = await fetch(`/api/sources/${sourceId}/tasks`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        })
-
-        const data = await response.json()
-
-        if (data.success) {
-          setTasks(data.data.tasks)
-        } else {
-          throw new Error(data.error?.message || 'Failed to load tasks')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load tasks')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     fetchTasks()
   }, [sourceId, accessToken])
 
@@ -72,20 +113,71 @@ export function SourceTasksTab({ sourceId }: SourceTasksTabProps) {
   }
 
   if (tasks.length === 0) {
+    const isAdmin = user && ['SUPER_ADMIN', 'ADMIN'].includes(user.role)
+
     return (
-      <div
-        className="rounded-lg border p-12 text-center"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          borderColor: 'var(--border-primary)',
-        }}
-      >
-        <div className="text-4xl mb-3">📝</div>
-        <div className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-          No tasks have been generated yet
-        </div>
-        <div style={{ color: 'var(--text-secondary)' }}>
-          Tasks are created automatically by the scheduler based on task templates
+      <div className="space-y-4">
+        {generateMessage && (
+          <div
+            className="p-4 rounded-lg border"
+            style={{
+              backgroundColor: generateMessage.startsWith('✓')
+                ? 'rgba(52, 211, 153, 0.1)'
+                : 'rgba(255, 68, 79, 0.1)',
+              borderColor: generateMessage.startsWith('✓')
+                ? 'var(--accent-green)'
+                : 'var(--accent-red)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {generateMessage}
+          </div>
+        )}
+
+        <div
+          className="rounded-lg border p-12 text-center"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-primary)',
+          }}
+        >
+          <div className="text-4xl mb-3">📝</div>
+          <div className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+            No tasks have been generated yet
+          </div>
+          <div className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+            Tasks are created automatically by the scheduler based on task templates.
+          </div>
+          <div
+            className="text-xs mb-4 max-w-md mx-auto"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <strong>Note:</strong> Tasks are generated based on frequency rules:
+            <br />
+            • DAILY tasks generate every day
+            <br />
+            • WEEKLY tasks generate on Mondays
+            <br />
+            • MONTHLY tasks generate on the 1st of each month
+            <br />
+            • QUARTERLY tasks generate on the 1st of Jan, Apr, Jul, Oct
+            <br />• ONE_TIME tasks generate once
+          </div>
+
+          {isAdmin && (
+            <div className="mt-4">
+              <Button
+                variant="secondary"
+                onClick={handleGenerateTasks}
+                disabled={isGenerating}
+              >
+                {isGenerating ? 'Generating Tasks...' : '⚡ Manually Trigger Task Generation'}
+              </Button>
+              <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                Admin only: Runs the task generation cron job now
+              </p>
+            </div>
+          )}
         </div>
       </div>
     )
