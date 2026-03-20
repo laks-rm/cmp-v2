@@ -310,7 +310,6 @@ async function processTemplates(
         } else {
           console.log(`🔒 Template "${template.title}" completed (${template.frequency})`)
         }
-      }
     } catch (error) {
       const msg = `Failed: template ${template.id} — ${error instanceof Error ? error.message : 'Unknown'}`
       console.error(`❌ ${msg}`)
