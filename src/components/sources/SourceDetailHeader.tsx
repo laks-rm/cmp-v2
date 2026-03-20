@@ -14,6 +14,7 @@ export function SourceDetailHeader({ source, onUpdate }: SourceDetailHeaderProps
   const { accessToken } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isActivating, setIsActivating] = useState(false)
   const [editValues, setEditValues] = useState({
     title: source.title,
     category: source.category,
@@ -70,6 +71,44 @@ export function SourceDetailHeader({ source, onUpdate }: SourceDetailHeaderProps
       }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to archive source')
+    }
+  }
+
+  const handleActivate = async () => {
+    const newStatus = source.status === 'ACTIVE' ? 'DRAFT' : 'ACTIVE'
+    const confirmMessage =
+      newStatus === 'ACTIVE'
+        ? 'Activate this source? Tasks will be generated automatically based on templates.'
+        : 'Deactivate this source? No new tasks will be generated.'
+
+    if (!confirm(confirmMessage)) return
+
+    setIsActivating(true)
+
+    try {
+      const response = await fetch(`/api/sources/${source.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        onUpdate()
+        if (newStatus === 'ACTIVE') {
+          alert('Source activated! Tasks are being generated in the background.')
+        }
+      } else {
+        alert(data.error?.message || 'Failed to update source status')
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update source status')
+    } finally {
+      setIsActivating(false)
     }
   }
 
@@ -195,6 +234,23 @@ export function SourceDetailHeader({ source, onUpdate }: SourceDetailHeaderProps
             </>
           ) : (
             <>
+              {source.status !== 'ARCHIVED' && (
+                <button
+                  onClick={handleActivate}
+                  disabled={isActivating}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                  style={{
+                    backgroundColor:
+                      source.status === 'ACTIVE' ? 'var(--accent-amber)' : 'var(--accent-green)',
+                  }}
+                >
+                  {isActivating
+                    ? 'Processing...'
+                    : source.status === 'ACTIVE'
+                    ? 'Deactivate'
+                    : 'Activate'}
+                </button>
+              )}
               <button
                 onClick={() => setIsEditing(true)}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
