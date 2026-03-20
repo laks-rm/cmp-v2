@@ -309,20 +309,21 @@ export async function POST(request: NextRequest) {
     })
 
     // If source is ACTIVE, trigger task generation immediately
+    // Run in background without awaiting to not block the response
     if (source.status === 'ACTIVE') {
       console.log(`🚀 Source activated, triggering immediate task generation for ${result.source_id}`)
       
-      // Run task generation in the background without blocking the response
-      setImmediate(async () => {
-        try {
-          const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
-          const taskGenResult = await generateTasksForSource(result.source_id)
-          console.log(
-            `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
-          )
-        } catch (error) {
-          console.error('Task generation error (non-blocking):', error)
-        }
+      // Fire and forget - don't await, let it run async
+      import('@/lib/cron/generate-tasks').then(({ generateTasksForSource }) => {
+        generateTasksForSource(result.source_id)
+          .then((taskGenResult) => {
+            console.log(
+              `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
+            )
+          })
+          .catch((error) => {
+            console.error('Task generation error (non-blocking):', error)
+          })
       })
     }
 

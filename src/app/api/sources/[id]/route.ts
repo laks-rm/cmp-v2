@@ -159,20 +159,21 @@ export async function PUT(
     const source = await sourceService.updateSource(params.id, validation.data, decoded.userId)
 
     // If status changed to ACTIVE, trigger task generation
+    // Run in background without awaiting to not block the response
     if (newStatus === 'ACTIVE' && oldStatus !== 'ACTIVE') {
       console.log(`🚀 Source status changed to ACTIVE, triggering task generation for ${params.id}`)
       
-      // Run task generation in the background without blocking the response
-      setImmediate(async () => {
-        try {
-          const { generateTasksForSource } = await import('@/lib/cron/generate-tasks')
-          const taskGenResult = await generateTasksForSource(params.id)
-          console.log(
-            `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
-          )
-        } catch (error) {
-          console.error('Task generation error (non-blocking):', error)
-        }
+      // Fire and forget - don't await, let it run async
+      import('@/lib/cron/generate-tasks').then(({ generateTasksForSource }) => {
+        generateTasksForSource(params.id)
+          .then((taskGenResult) => {
+            console.log(
+              `✅ Task generation complete: ${taskGenResult.tasks_created} tasks created, ${taskGenResult.tasks_skipped} skipped`
+            )
+          })
+          .catch((error) => {
+            console.error('Task generation error (non-blocking):', error)
+          })
       })
     }
 
