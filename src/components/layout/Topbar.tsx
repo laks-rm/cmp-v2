@@ -1,6 +1,7 @@
 'use client'
 
 import { useTheme } from '@/hooks/useTheme'
+import { NotificationDropdown } from './NotificationDropdown'
 
 export function Topbar() {
   const { theme, toggleTheme } = useTheme()
@@ -78,21 +79,7 @@ export function Topbar() {
         </button>
 
         {/* Notifications */}
-        <button
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:scale-105"
-          style={{
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
-          }}
-          aria-label="Notifications"
-        >
-          <span className="text-lg">🔔</span>
-          {/* Unread indicator */}
-          <span
-            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-            style={{ backgroundColor: 'var(--accent-red)' }}
-          />
-        </button>
+        <NotificationDropdown />
       </div>
     </header>
   )
