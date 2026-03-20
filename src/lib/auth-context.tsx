@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (!response.ok) {
+        // 401 is expected when not authenticated - don't log as error
         return false
       }
 
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return false
     } catch (error) {
-      console.error('Fetch user error:', error)
+      // Silently fail - expected when not authenticated
       return false
     }
   }
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (!response.ok) {
+        // No refresh token - expected for new sessions
         return false
       }
 
@@ -91,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return false
     } catch (error) {
-      console.error('Refresh token error:', error)
+      // Silently fail - expected when no valid refresh token
       return false
     }
   }
